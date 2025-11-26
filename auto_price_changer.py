@@ -7,6 +7,7 @@ from datetime import datetime
 from g2a_api_client import G2AApiClient
 from telegram_notifier import notifier
 import g2a_config
+from database import PriceDatabase
 
 
 class AutoPriceSettings:
@@ -206,6 +207,9 @@ class AutoPriceChanger:
                         success = await self.update_offer_price(offer_id, new_price, offer_info)
                         if success:
                             self.limit_tracker.record_change()
+                                                        # Save to database
+                                                        db = PriceDatabase()
+                            db.save_price_change(product_id, current_price, new_price, new_price, reason="автоизменение")
                             print(f"✅ {game_name}: €{current_price} → €{new_price}")
                             
                             # Отправляем уведомление
