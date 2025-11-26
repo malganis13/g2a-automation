@@ -37,6 +37,7 @@ class G2AAutomationGUI(ctk.CTk):
 
         # Переменные настроек
         self.telegram_enabled = tk.BooleanVar(value=False)
+        self.seller_id_var = tk.StringVar(value="")
 
         # Для хранения данных офферов
         self.offers_data = {}
@@ -99,6 +100,11 @@ class G2AAutomationGUI(ctk.CTk):
         ctk.CTkLabel(scrollable, text="G2A Account Email:", font=("Arial", 12)).pack(pady=5)
         self.client_email_entry = ctk.CTkEntry(scrollable, textvariable=self.client_email_var, width=400, height=26)
         self.client_email_entry.pack(pady=5)
+
+        ctk.CTkLabel(scrollable, text="G2A Seller ID (автоматический):", font=("Arial", 12)).pack(pady=5)
+        self.seller_id_entry = ctk.CTkEntry(scrollable, textvariable=self.seller_id_var, width=400, height=26, state="disabled")
+        self.seller_id_entry.pack(pady=5)
+        ctk.CTkLabel(scrollable, text="💡 ID получается автоматически при первой загрузке офферов", font=("Arial", 9), text_color="gray").pack(pady=3)
 
         # Разделитель
         ctk.CTkLabel(scrollable, text="─" * 60).pack(pady=20)
@@ -603,6 +609,7 @@ class G2AAutomationGUI(ctk.CTk):
         self.client_email_var.set(g2a_config.G2A_CLIENT_EMAIL)
         self.telegram_token_var.set(g2a_config.TELEGRAM_BOT_TOKEN)
         self.telegram_chat_var.set(g2a_config.TELEGRAM_CHAT_ID)
+        self.seller_id_var.set(g2a_config.G2A_SELLER_ID)
 
         # Загружаем настройки автоизменения
         self.load_auto_settings()
@@ -652,6 +659,7 @@ class G2AAutomationGUI(ctk.CTk):
             "G2A_CLIENT_ID": client_id,
             "G2A_CLIENT_SECRET": client_secret,
             "G2A_CLIENT_EMAIL": client_email,
+            "G2A_SELLER_ID": self.seller_id_var.get(),
             "TELEGRAM_BOT_TOKEN": telegram_token,
             "TELEGRAM_CHAT_ID": telegram_chat,
             "TELEGRAM_ENABLED": self.telegram_enabled.get()
@@ -854,8 +862,16 @@ class G2AAutomationGUI(ctk.CTk):
 
                 print("Загрузка офферов...")
                 result = loop.run_until_complete(self.api_client.get_offers())
-
                 if result.get("success"):
+                    # ✅ НОВОЕ: Получаем seller_id автоматически
+                    if result.get("offers_cache"):
+                        first_offer = next(iter(result["offers_cache"].values()), None)
+                        if first_offer and first_offer.get("seller_id"):
+                            seller_id = first_offer.get("seller_id")
+                            self.seller_id_var.set(seller_id)
+                            g2a_config.G2A_SELLER_ID = seller_id
+                            print(f"✅ Seller ID получен: {seller_id}")
+
                     # Очищаем таблицу
                     for item in self.offers_tree.get_children():
                         self.offers_tree.delete(item)
