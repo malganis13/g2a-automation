@@ -376,13 +376,13 @@ class AutoPriceChanger:
                         return
                     await asyncio.sleep(1)
 
-            await self.cleanup()
-            print("✅ Автоизменение цен остановлено")
+        await self.cleanup()
+        print("✅ Автоизменение цен остановлено")
 
-            def stop(self):
-                """Остановка автоматизации"""
-                self.running = False
-                print("🛑 Запрошена остановка автоизменения...")
+    def stop(self):
+        """Остановка автоматизации"""
+        self.running = False
+        print("🛑 Запрошена остановка автоизменения...")
 
     async def check_market_price(self, product_id):
         """Проверка рыночной цены (ИСПРАВЛЕНО)"""
@@ -500,31 +500,18 @@ class AutoPriceChanger:
     async def send_telegram_notification(self, game_name, old_price, new_price, market_price):
         """Отправка уведомления в Telegram"""
         try:
-            direction = "📉" if new_price < old_price else "📈"
-
-            message = (
-                f"{direction} <b>Автоизменение цены</b>\n\n"
-                f"🎮 Игра: {game_name}\n"
-                f"💰 Старая цена: €{old_price:.2f}\n"
-                f"💸 Новая цена: €{new_price:.2f}\n"
-                f"📊 Рыночная: €{market_price:.2f}\n"
-                f"🕐 {datetime.now().strftime('%H:%M:%S')}"
-            )
-
-            await notifier.send_sale_notification(
+            # ✅ ИСПРАВЛЕНО: Используем send_price_change_notification вместо send_sale_notification
+            await notifier.send_price_change_notification(
                 game_name=game_name,
-                key_value="",
-                price=new_price,
-                prefix=""
+                old_price=old_price,
+                new_price=new_price,
+                market_price=market_price,
+                reason="автоизменение",
+                min_competitor_price=market_price,
+                change_reason="Автоматическое изменение на основе рыночной цены"
             )
-
         except Exception as e:
             print(f"   ⚠️ Ошибка отправки в Telegram: {e}")
-
-    def stop(self):
-        """Остановка автоматизации"""
-        self.running = False
-        print("🛑 Автоматическое изменение цен остановлено")
 
 
 async def main():
