@@ -8,6 +8,96 @@ class PriceDatabase:
         self.conn = sqlite3.connect(DATABASE_FILE)
         self.create_tables()
 
+    def save_price_change(self, product_id, old_price, new_price, market_price, reason="manual"):
+        """
+        ✅ НОВАЯ ФУНКЦИЯ: Сохранить изменение цены в базу
+        """
+        try:
+            stats_file = "price_changes_stats.json"
+
+            if os.path.exists(stats_file):
+                with open(stats_file, 'r', encoding='utf-8') as f:
+                    stats = json.load(f)
+            else:
+                stats = []
+
+            stats.append({
+                "timestamp": datetime.now().isoformat(),
+                "product_id": product_id,
+                "old_price": old_price,
+                "new_price": new_price,
+                "market_price": market_price,
+                "change": round(new_price - old_price, 2),
+                "reason": reason
+            })
+
+            with open(stats_file, 'w', encoding='utf-8') as f:
+                json.dump(stats, f, indent=4, ensure_ascii=False)
+
+            return True
+
+        except Exception as e:
+            print(f"❌ Ошибка сохранения статистики: {e}")
+            return False
+
+    def get_stats_for_period(self, days=1):
+        """
+        ✅ НОВАЯ ФУНКЦИЯ: Получить статистику за период
+        """
+        try:
+            stats_file = "price_changes_stats.json"
+
+            if not os.path.exists(stats_file):
+                return {
+                    "total_changes": 0,
+                    "price_increases": 0,
+                    "price_decreases": 0,
+                    "avg_change": 0,
+                    "total_change": 0
+                }
+
+            with open(stats_file, 'r', encoding='utf-8') as f:
+                all_stats = json.load(f)
+
+            # Фильтруем по дате
+            cutoff_date = datetime.now() - timedelta(days=days)
+            recent_stats = [
+                s for s in all_stats
+                if datetime.fromisoformat(s.get("timestamp", "")) > cutoff_date
+            ]
+
+            if not recent_stats:
+                return {
+                    "total_changes": 0,
+                    "price_increases": 0,
+                    "price_decreases": 0,
+                    "avg_change": 0,
+                    "total_change": 0
+                }
+
+            increases = sum(1 for s in recent_stats if s["change"] > 0)
+            decreases = sum(1 for s in recent_stats if s["change"] < 0)
+            total_change = sum(s["change"] for s in recent_stats)
+            avg_change = total_change / len(recent_stats) if recent_stats else 0
+
+            return {
+                "total_changes": len(recent_stats),
+                "price_increases": increases,
+                "price_decreases": decreases,
+                "avg_change": round(avg_change, 2),
+                "total_change": round(total_change, 2)
+            }
+
+        except Exception as e:
+            print(f"❌ Ошибка получения статистики: {e}")
+            return {
+                "total_changes": 0,
+                "price_increases": 0,
+                "price_decreases": 0,
+                "avg_change": 0,
+                "total_change": 0
+            }
+
     def create_tables(self):
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS prices (
