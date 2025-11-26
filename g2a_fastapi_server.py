@@ -1136,37 +1136,6 @@ async def cleanup_expired_tokens():
         await asyncio.sleep(300)
 
 
-from contextlib import asynccontextmanager
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    init_database()
-
-    # Создаём фоновые задачи
-    cleanup_task = asyncio.create_task(cleanup_expired_tokens())
-    auto_price_task = asyncio.create_task(auto_price_adjustment())
-
-    logger.info("G2A-compatible API Server started successfully")
-
-    yield  # Приложение работает
-
-    # Shutdown (опционально)
-    cleanup_task.cancel()
-    auto_price_task.cancel()
-    logger.info("Server shutting down...")
-
-
-# ✅ ИСПРАВЛЕНИЕ: Применяем lifespan к app
-app = FastAPI(
-    title="G2A Merchant API",
-    version="1.0.0",
-    description="G2A-совместимый API для dropshipping согласно официальной спецификации",
-    lifespan=lifespan  # ← Добавляем lifespan
-)
-
-
 
 if __name__ == "__main__":
     import uvicorn
