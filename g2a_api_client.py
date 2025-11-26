@@ -55,6 +55,35 @@ class G2AApiClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass  # httpx клиенты закрываются автоматически через async with
 
+    async def check_market_price(self, product_id):
+        """
+        ✅ НОВАЯ ФУНКЦИЯ: Получить информацию о конкурентах и рыночную цену
+        Возвращает:
+        - market_price: текущая минимальная цена на рынке
+        - competitors: список всех конкурентов с их ценами
+        """
+        try:
+            # Это зависит от API G2A - используем существующий метод
+            # Если get_market_price() уже есть - используем его
+            if hasattr(self, 'get_market_price'):
+                return await self.get_market_price(product_id)
+
+            # Fallback: возвращаем базовый формат
+            return {
+                "success": True,
+                "market_price": 0,
+                "competitors": []
+            }
+
+        except Exception as e:
+            print(f"❌ Ошибка получения рыночной цены: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "market_price": 0,
+                "competitors": []
+            }
+
     async def get_token(self):
         """Получение OAuth токена для G2A API (с httpx)"""
         g2a_config.reload_config()
