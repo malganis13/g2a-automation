@@ -45,33 +45,33 @@ class AutoPriceSettings:
         except Exception as e:
             print(f"❌ Ошибка сохранения: {e}")
 
-    def is_product_allowed(self, product_id):
+    def is_product_allowed(self, pproduct_id):
         """Проверить разрешено ли автоизменение"""
-        product_id = str(product_id)
+        pproduct_id = str(pproduct_id)
         if not self.settings.get("enabled", False):
             return False
         excluded = self.settings.get("excluded_products", [])
-        if product_id in [str(e) for e in excluded]:
+        if pproduct_id in [str(e) for e in excluded]:
             return False
         included = self.settings.get("included_products", [])
         if included:
-            return product_id in [str(i) for i in included]
+            return pproduct_id in [str(i) for i in included]
         return True
 
-    def toggle_product(self, product_id, enabled=True):
+    def toggle_product(self, pproduct_id, enabled=True):
         """Включить/выключить автоизменение для товара"""
-        product_id = str(product_id)
+        pproduct_id = str(pproduct_id)
         excluded = self.settings.get("excluded_products", [])
         included = self.settings.get("included_products", [])
 
         if enabled:
-            self.settings["excluded_products"] = [str(p) for p in excluded if str(p) != product_id]
-            if roduct_id not in [str(i) for i in included]:
-                self.settings["included_products"].append(product_id)
+            self.settings["excluded_products"] = [str(p) for p in excluded if str(p) != pproduct_id]
+            if product_id not in [str(i) for i in included]:
+                self.settings["included_products"].append(pproduct_id)
         else:
-            if product_id not in [str(e) for e in excluded]:
-                self.settings["excluded_products"].append(product_id)
-            self.settings["included_products"] = [str(i) for i in included if str(i) != product_id]
+            if pproduct_id not in [str(e) for e in excluded]:
+                self.settings["excluded_products"].append(pproduct_id)
+            self.settings["included_products"] = [str(i) for i in included if str(i) != pproduct_id]
 
         self.save_settings()
 
@@ -185,9 +185,9 @@ class AutoPriceChanger:
 
             print(f"📊 Проверка {len(offers)} офферов (осталось {remaining})")
 
-            for product_id, offer_info in offers.items():
+            for pproduct_id, offer_info in offers.items():
                 try:
-                    if not self.settings.is_product_allowed(product_id):
+                    if not self.settings.is_product_allowed(pproduct_id):
                         continue
 
                     can_change, remaining = self.limit_tracker.can_change(daily_limit)
@@ -199,7 +199,7 @@ class AutoPriceChanger:
                     game_name = offer_info.get("product_name", "Unknown")
 
                     new_price = await self.calculate_new_price(
-                        product_id, current_price, game_name, offer_id
+                        pproduct_id, current_price, game_name, offer_id
                     )
 
                     if new_price and new_price != current_price:
@@ -211,7 +211,7 @@ class AutoPriceChanger:
                                 from database import PriceDatabase
                                 db = PriceDatabase()
                                 db.save_price_change(
-                                    product_id,
+                                    pproduct_id,
                                     current_price,  # old_price
                                     new_price,
                                     new_price,  # market_price
@@ -227,14 +227,14 @@ class AutoPriceChanger:
                             )
                 
                 except Exception as e:
-                    print(f"❌ Ошибка {product_id}: {e}")
+                    print(f"❌ Ошибка {pproduct_id}: {e}")
         
         except Exception as e:
             print(f"❌ Критическая ошибка: {e}")
             import traceback
             traceback.print_exc()
     
-    async def calculate_new_price(self, product_id, current_price, game_name, offer_id):
+    async def calculate_new_price(self, pproduct_id, current_price, game_name, offer_id):
         """
         ✅ НОВАЯ ЛОГИКА РАСЧЁТА ЦЕНЫ
         
@@ -245,7 +245,7 @@ class AutoPriceChanger:
         """
         
         try:
-            market_info = await self.api_client.check_market_price(product_id)
+            market_info = await self.api_client.check_market_price(pproduct_id)
             
             if not market_info.get("success"):
                 return None
@@ -352,7 +352,7 @@ class AutoPriceChanger:
             print(f"⚠️ Ошибка отправки Telegram: {e}")
 
 
-def save_price_change_stats(product_id, old_price, new_price, market_price, reason):
+def save_price_change_stats(pproduct_id, old_price, new_price, market_price, reason):
     """Сохранить статистику изменения"""
     try:
         stats_file = "price_changes_stats.json"
@@ -365,7 +365,7 @@ def save_price_change_stats(product_id, old_price, new_price, market_price, reas
         
         stats.append({
             "timestamp": datetime.now().isoformat(),
-            "product_id": product_id,
+            "pproduct_id": pproduct_id,
             "old_price": old_price,
             "new_price": new_price,
             "market_price": market_price,
