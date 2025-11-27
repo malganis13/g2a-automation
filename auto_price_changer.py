@@ -206,6 +206,19 @@ class AutoPriceChanger:
                         success = await self.update_offer_price(offer_id, new_price, offer_info)
                         if success:
                             self.limit_tracker.record_change()
+                            # ✅ НОВОЕ: Сохраняем статистику в БД
+                            try:
+                                from database import PriceDatabase
+                                db = PriceDatabase()
+                                db.save_price_change(
+                                    product_id,
+                                    current_price,  # old_price
+                                    new_price,
+                                    new_price,  # market_price
+                                    reason="автоизменение"
+                                )
+                            except Exception as e:
+                                print(f"⚠️ Ошибка сохранения статистики: {e}")
                             print(f"✅ {game_name}: €{current_price} → €{new_price}")
                             
                             # Отправляем уведомление
@@ -289,6 +302,7 @@ class AutoPriceChanger:
     
     async def update_offer_price(self, offer_id, new_price, offer_info):
         """Обновить цену оффера"""
+
         try:
             update_data = {
                 "offerType": offer_info.get("offer_type", "dropshipping"),
@@ -308,11 +322,11 @@ class AutoPriceChanger:
             
             result = await self.api_client.update_offer_partial(offer_id, update_data)
             return result.get("success", False)
-        
+
         except Exception as e:
             print(f"❌ Ошибка обновления: {e}")
             return False
-    
+
     async def send_telegram_notification(self, game_name, old_price, new_price, reason):
         """Отправить уведомление в Telegram"""
         try:
