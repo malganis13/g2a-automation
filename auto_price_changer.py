@@ -7,6 +7,7 @@ from datetime import datetime
 from g2a_api_client import G2AApiClient
 from telegram_notifier import notifier
 import g2a_config
+from database import PriceDatabase
 
 
 class AutoPriceSettings:
@@ -206,6 +207,7 @@ class AutoPriceChanger:
                         success = await self.update_offer_price(offer_id, new_price, offer_info)
                         if success:
                             self.limit_tracker.record_change()
+<<<<<<< HEAD
                             # ✅ НОВОЕ: Сохраняем статистику в БД
                             try:
                                 from database import PriceDatabase
@@ -219,6 +221,11 @@ class AutoPriceChanger:
                                 )
                             except Exception as e:
                                 print(f"⚠️ Ошибка сохранения статистики: {e}")
+=======
+                                                        # Save to database
+                                                        db = PriceDatabase()
+                            db.save_price_change(product_id, current_price, new_price, new_price, reason="автоизменение")
+>>>>>>> 1705c1742124f9fb14ad2579509903b23682e81c
                             print(f"✅ {game_name}: €{current_price} → €{new_price}")
                             
                             # Отправляем уведомление

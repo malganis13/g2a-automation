@@ -151,8 +151,13 @@ def reload_config():
     G2A_CLIENT_ID = config.get("G2A_CLIENT_ID", "")
     G2A_CLIENT_SECRET = config.get("G2A_CLIENT_SECRET", "")
     G2A_CLIENT_EMAIL = config.get("G2A_CLIENT_EMAIL", "")
+<<<<<<< HEAD
     G2A_SELLER_ID = config.get("G2A_SELLER_ID", "")
     TELEGRAM_BOT_TOKEN = config.get("TELEGRAM_BOT_TOKEN", "")
+=======
+G2A_SELLER_ID = config.get("G2A_SELLER_ID", "")    TELEGRAM_BOT_TOKEN = config.get("TELEGRAM_BOT_TOKEN", "")
+
+>>>>>>> 1705c1742124f9fb14ad2579509903b23682e81c
     TELEGRAM_CHAT_ID = config.get("TELEGRAM_CHAT_ID", "")
     MIN_PRICE_TO_SELL = config.get("MIN_PRICE_TO_SELL", 0.3)
     print("✅ Конфигурация перезагружена!")
