@@ -66,7 +66,7 @@ class AutoPriceSettings:
 
         if enabled:
             self.settings["excluded_products"] = [str(p) for p in excluded if str(p) != product_id]
-            if included and product_id not in [str(i) for i in included]:
+            if roduct_id not in [str(i) for i in included]:
                 self.settings["included_products"].append(product_id)
         else:
             if product_id not in [str(e) for e in excluded]:
