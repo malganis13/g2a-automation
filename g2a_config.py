@@ -4,79 +4,111 @@
 """
 
 from typing import Optional
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+try:
+    from pydantic_settings import BaseSettings, SettingsConfigDict
+    from pydantic import Field, field_validator
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    PYDANTIC_AVAILABLE = False
+    print("⚠️  pydantic not installed, using fallback configuration")
+    print("Install: pip install pydantic pydantic-settings")
+
 import json
 import os
 from pathlib import Path
 
 
-class G2AConfig(BaseSettings):
-    """Настройки приложения"""
-    
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"  # Игнорировать неизвестные поля
-    )
-    
-    # ===== G2A API =====
-    g2a_client_id: str = Field(default="", description="G2A Client ID")
-    g2a_client_secret: str = Field(default="", description="G2A Client Secret")
-    g2a_api_base: str = Field(default="https://gateway.g2a.com", description="G2A API Base URL")
-    
-    # ===== Telegram =====
-    telegram_bot_token: Optional[str] = Field(default=None, description="Telegram Bot Token")
-    telegram_chat_id: Optional[str] = Field(default=None, description="Telegram Chat ID")
-    
-    # ===== Proxy =====
-    proxy_url: Optional[str] = Field(default=None, description="Proxy URL (http://user:pass@host:port)")
-    
-    # ===== Server =====
-    server_host: str = Field(default="0.0.0.0", description="Server host")
-    server_port: int = Field(default=8000, description="Server port")
-    
-    # ===== Database =====
-    database_path: str = Field(default="keys.db", description="SQLite database path")
-    
-    # ===== Logging =====
-    log_level: str = Field(default="INFO", description="Logging level")
-    log_to_file: bool = Field(default=True, description="Enable file logging")
-    
-    # ===== Exchange Rate =====
-    default_eur_usd_rate: float = Field(default=1.1, description="Default EUR/USD rate")
-    
-    # ===== HTTP Settings =====
-    request_timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
-    max_retries: int = Field(default=3, description="Max retry attempts")
-    
-    @field_validator("g2a_client_id", "g2a_client_secret")
-    @classmethod
-    def check_not_empty_if_set(cls, v):
-        """Проверка что если задано, то не пустое"""
-        if v and len(v.strip()) == 0:
-            print(f"Warning: credential is set but empty")
-        return v
-    
-    @field_validator("log_level")
-    @classmethod
-    def validate_log_level(cls, v):
-        """Валидация уровня логирования"""
-        allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-        v_upper = v.upper()
-        if v_upper not in allowed:
-            print(f"Invalid log_level '{v}', using INFO")
-            return "INFO"
-        return v_upper
-    
-    def is_g2a_configured(self) -> bool:
-        """Проверка что G2A API настроен"""
-        return bool(self.g2a_client_id and self.g2a_client_secret)
-    
-    def is_telegram_configured(self) -> bool:
-        """Проверка что Telegram настроен"""
-        return bool(self.telegram_bot_token and self.telegram_chat_id)
+if PYDANTIC_AVAILABLE:
+    class G2AConfig(BaseSettings):
+        """Настройки приложения"""
+        
+        model_config = SettingsConfigDict(
+            env_file=".env",
+            env_file_encoding="utf-8",
+            case_sensitive=False,
+            extra="ignore"  # Игнорировать неизвестные поля
+        )
+        
+        # ===== G2A API =====
+        g2a_client_id: str = Field(default="", description="G2A Client ID")
+        g2a_client_secret: str = Field(default="", description="G2A Client Secret")
+        g2a_api_base: str = Field(default="https://gateway.g2a.com", description="G2A API Base URL")
+        
+        # ===== Telegram =====
+        telegram_bot_token: Optional[str] = Field(default=None, description="Telegram Bot Token")
+        telegram_chat_id: Optional[str] = Field(default=None, description="Telegram Chat ID")
+        
+        # ===== Proxy =====
+        proxy_url: Optional[str] = Field(default=None, description="Proxy URL (http://user:pass@host:port)")
+        
+        # ===== Server =====
+        server_host: str = Field(default="0.0.0.0", description="Server host")
+        server_port: int = Field(default=8000, description="Server port")
+        
+        # ===== Database =====
+        database_path: str = Field(default="keys.db", description="SQLite database path")
+        
+        # ===== Logging =====
+        log_level: str = Field(default="INFO", description="Logging level")
+        log_to_file: bool = Field(default=True, description="Enable file logging")
+        
+        # ===== Exchange Rate =====
+        default_eur_usd_rate: float = Field(default=1.1, description="Default EUR/USD rate")
+        
+        # ===== HTTP Settings =====
+        request_timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
+        max_retries: int = Field(default=3, description="Max retry attempts")
+        
+        @field_validator("g2a_client_id", "g2a_client_secret")
+        @classmethod
+        def check_not_empty_if_set(cls, v):
+            """Проверка что если задано, то не пустое"""
+            if v and len(v.strip()) == 0:
+                print(f"Warning: credential is set but empty")
+            return v
+        
+        @field_validator("log_level")
+        @classmethod
+        def validate_log_level(cls, v):
+            """Валидация уровня логирования"""
+            allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+            v_upper = v.upper()
+            if v_upper not in allowed:
+                print(f"Invalid log_level '{v}', using INFO")
+                return "INFO"
+            return v_upper
+        
+        def is_g2a_configured(self) -> bool:
+            """Проверка что G2A API настроен"""
+            return bool(self.g2a_client_id and self.g2a_client_secret)
+        
+        def is_telegram_configured(self) -> bool:
+            """Проверка что Telegram настроен"""
+            return bool(self.telegram_bot_token and self.telegram_chat_id)
+else:
+    # Fallback конфиг без Pydantic
+    class G2AConfig:
+        def __init__(self):
+            self.g2a_client_id = os.getenv("G2A_CLIENT_ID", "")
+            self.g2a_client_secret = os.getenv("G2A_CLIENT_SECRET", "")
+            self.g2a_api_base = os.getenv("G2A_API_BASE", "https://gateway.g2a.com")
+            self.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+            self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+            self.proxy_url = os.getenv("PROXY_URL")
+            self.server_host = os.getenv("SERVER_HOST", "0.0.0.0")
+            self.server_port = int(os.getenv("SERVER_PORT", "8000"))
+            self.database_path = os.getenv("DATABASE_PATH", "keys.db")
+            self.log_level = os.getenv("LOG_LEVEL", "INFO")
+            self.log_to_file = os.getenv("LOG_TO_FILE", "true").lower() == "true"
+            self.default_eur_usd_rate = float(os.getenv("DEFAULT_EUR_USD_RATE", "1.1"))
+            self.request_timeout = int(os.getenv("REQUEST_TIMEOUT", "30"))
+            self.max_retries = int(os.getenv("MAX_RETRIES", "3"))
+        
+        def is_g2a_configured(self):
+            return bool(self.g2a_client_id and self.g2a_client_secret)
+        
+        def is_telegram_configured(self):
+            return bool(self.telegram_bot_token and self.telegram_chat_id)
 
 
 # ===== Глобальный экземпляр конфига =====
@@ -109,6 +141,9 @@ DEFAULT_PREFIX = "pref"
 ADMIN_API_KEY = "akblfkykc635671"
 G2A_BASE_URL = "https://www.g2a.com/category/gaming-c1"
 G2A_BASE_PARAMS = "f%5Bplatform%5D%5B0%5D=1&f%5Btype%5D%5B0%5D=10"
+
+# ОЧЕНЬ ВАЖНО: DATABASE_FILE для backward compatibility!
+DATABASE_FILE = config.database_path
 
 REGION_CODES = {
     "GLOBAL": 8355,
@@ -164,7 +199,7 @@ HEADERS = {
 
 def reload_config():
     """Перезагрузка конфигурации из .env"""
-    global config, G2A_CLIENT_ID, G2A_CLIENT_SECRET, G2A_API_BASE, REQUEST_TIMEOUT
+    global config, G2A_CLIENT_ID, G2A_CLIENT_SECRET, G2A_API_BASE, REQUEST_TIMEOUT, DATABASE_FILE
     
     print("🔄 Reloading configuration...")
     config = G2AConfig()
@@ -174,6 +209,7 @@ def reload_config():
     G2A_CLIENT_SECRET = config.g2a_client_secret
     G2A_API_BASE = config.g2a_api_base
     REQUEST_TIMEOUT = config.request_timeout
+    DATABASE_FILE = config.database_path
     
     print("✅ Configuration reloaded")
 
@@ -223,7 +259,6 @@ def update_g2a_credentials(client_id: str, client_secret: str):
 # ===== Вспомогательные функции (для совместимости со старым кодом) =====
 def generate_credentials():
     """Генерация credentials (deprecated, оставлено для совместимости)"""
-    print("Warning: generate_credentials() is deprecated, use .env file instead")
     return {
         "client_id": config.g2a_client_id,
         "client_secret": config.g2a_client_secret
@@ -232,7 +267,6 @@ def generate_credentials():
 
 def save_credentials_to_file(credentials: dict):
     """Сохранение credentials (deprecated)"""
-    print("Warning: save_credentials_to_file() is deprecated")
     update_g2a_credentials(
         credentials.get("client_id", ""),
         credentials.get("client_secret", "")
@@ -254,4 +288,5 @@ if __name__ == "__main__":
     print(f"Database: {config.database_path}")
     print(f"Log Level: {config.log_level}")
     print(f"Server: {config.server_host}:{config.server_port}")
+    print(f"DATABASE_FILE: {DATABASE_FILE}")
     print("=" * 40)
