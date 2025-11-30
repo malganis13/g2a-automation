@@ -1,0 +1,36 @@
+# Core
+python-dotenv==1.0.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# HTTP клиенты
+httpx==0.25.2
+curl-cffi==0.6.0
+requests==2.31.0
+
+# FastAPI и сервер
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Логирование
+loguru==0.7.2
+
+# База данных
+aiosqlite==0.19.0
+
+# Retry механизм
+tenacity==8.2.3
+
+# Парсинг
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Telegram
+python-telegram-bot==20.7
+
+# Утилиты
+colorama==0.4.6
+
+# Build
+pyinstaller==6.3.0
