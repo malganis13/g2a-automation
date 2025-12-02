@@ -11,6 +11,7 @@ class PriceDatabase:
         self.conn = sqlite3.connect(DATABASE_FILE)
         self.conn.row_factory = sqlite3.Row  # Для доступа по ключам
         self.create_tables()
+        self.migrate_database()  # ✅ ДОБАВЛЕНА МИГРАЦИЯ
 
     def create_tables(self):
         """Создание всех необходимых таблиц"""
@@ -87,6 +88,29 @@ class PriceDatabase:
             pass
 
         self.conn.commit()
+
+    def migrate_database(self):
+        """✅ НОВОЕ: Миграция существующей БД"""
+        try:
+            # Проверяем существует ли колонка change_amount
+            cursor = self.conn.execute("PRAGMA table_info(price_changes)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if "change_amount" not in columns:
+                print("🔄 Миграция БД: добавление колонки change_amount...")
+                self.conn.execute("ALTER TABLE price_changes ADD COLUMN change_amount REAL DEFAULT 0")
+                
+                # Обновляем существующие записи
+                self.conn.execute("""
+                    UPDATE price_changes 
+                    SET change_amount = (new_price - old_price)
+                    WHERE change_amount IS NULL OR change_amount = 0
+                """)
+                
+                self.conn.commit()
+                print("✅ Миграция завершена успешно")
+        except Exception as e:
+            print(f"⚠️ Ошибка миграции (можно игнорировать): {e}")
 
     # ==================== PRODUCT SETTINGS ====================
 

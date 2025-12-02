@@ -285,7 +285,11 @@ class AutoPriceChanger:
                 return None
             
             min_competitor_price = market_info.get("market_price", 0)
-            competitors_count = market_info.get("competitors_count", 0)
+            competitors_count = market_info.get("competitor_count", 0)
+            
+            if not min_competitor_price or min_competitor_price == 0:
+                print(f"⚠️ {game_name}: нет конкурентов")
+                return None
             
             # 2️⃣ Получаем индивидуальные настройки
             product_settings = self.db.get_product_settings(product_id)
