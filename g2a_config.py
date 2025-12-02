@@ -32,11 +32,14 @@ if PYDANTIC_AVAILABLE:
         # ===== G2A API =====
         g2a_client_id: str = Field(default="", description="G2A Client ID")
         g2a_client_secret: str = Field(default="", description="G2A Client Secret")
+        g2a_client_email: str = Field(default="", description="G2A Account Email")
+        g2a_seller_id: str = Field(default="", description="G2A Seller ID (auto-detected)")
         g2a_api_base: str = Field(default="https://gateway.g2a.com", description="G2A API Base URL")
         
         # ===== Telegram =====
         telegram_bot_token: Optional[str] = Field(default=None, description="Telegram Bot Token")
         telegram_chat_id: Optional[str] = Field(default=None, description="Telegram Chat ID")
+        telegram_enabled: bool = Field(default=False, description="Enable Telegram notifications")
         
         # ===== Proxy =====
         proxy_url: Optional[str] = Field(default=None, description="Proxy URL (http://user:pass@host:port)")
@@ -58,6 +61,9 @@ if PYDANTIC_AVAILABLE:
         # ===== HTTP Settings =====
         request_timeout: int = Field(default=30, description="HTTP request timeout (seconds)")
         max_retries: int = Field(default=3, description="Max retry attempts")
+        
+        # ===== Price Parser Settings =====
+        min_price_to_sell: float = Field(default=0.1, description="Minimum price to sell (EUR)")
         
         @field_validator("g2a_client_id", "g2a_client_secret")
         @classmethod
@@ -91,9 +97,12 @@ else:
         def __init__(self):
             self.g2a_client_id = os.getenv("G2A_CLIENT_ID", "")
             self.g2a_client_secret = os.getenv("G2A_CLIENT_SECRET", "")
+            self.g2a_client_email = os.getenv("G2A_CLIENT_EMAIL", "")
+            self.g2a_seller_id = os.getenv("G2A_SELLER_ID", "")
             self.g2a_api_base = os.getenv("G2A_API_BASE", "https://gateway.g2a.com")
             self.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
             self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+            self.telegram_enabled = os.getenv("TELEGRAM_ENABLED", "false").lower() == "true"
             self.proxy_url = os.getenv("PROXY_URL")
             self.server_host = os.getenv("SERVER_HOST", "0.0.0.0")
             self.server_port = int(os.getenv("SERVER_PORT", "8000"))
@@ -103,6 +112,7 @@ else:
             self.default_eur_usd_rate = float(os.getenv("DEFAULT_EUR_USD_RATE", "1.1"))
             self.request_timeout = int(os.getenv("REQUEST_TIMEOUT", "30"))
             self.max_retries = int(os.getenv("MAX_RETRIES", "3"))
+            self.min_price_to_sell = float(os.getenv("MIN_PRICE_TO_SELL", "0.1"))
         
         def is_g2a_configured(self):
             return bool(self.g2a_client_id and self.g2a_client_secret)
@@ -111,9 +121,34 @@ else:
             return bool(self.telegram_bot_token and self.telegram_chat_id)
 
 
+# ===== Загрузка сохраненных настроек из JSON (для GUI) =====
+def load_saved_config():
+    """Загрузка сохраненных настроек из g2a_config_saved.json"""
+    config_file = "g2a_config_saved.json"
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+
 # ===== Глобальный экземпляр конфига =====
 try:
     config = G2AConfig()
+    
+    # Попытка загрузить сохраненные настройки из JSON (для GUI)
+    saved_config = load_saved_config()
+    if saved_config:
+        config.g2a_client_id = saved_config.get("G2A_CLIENT_ID", config.g2a_client_id)
+        config.g2a_client_secret = saved_config.get("G2A_CLIENT_SECRET", config.g2a_client_secret)
+        config.g2a_client_email = saved_config.get("G2A_CLIENT_EMAIL", config.g2a_client_email)
+        config.g2a_seller_id = saved_config.get("G2A_SELLER_ID", config.g2a_seller_id)
+        config.telegram_bot_token = saved_config.get("TELEGRAM_BOT_TOKEN", config.telegram_bot_token)
+        config.telegram_chat_id = saved_config.get("TELEGRAM_CHAT_ID", config.telegram_chat_id)
+        config.telegram_enabled = saved_config.get("TELEGRAM_ENABLED", config.telegram_enabled)
+    
     print("✅ Configuration loaded successfully")
     
     if not config.is_g2a_configured():
@@ -128,8 +163,19 @@ except Exception as e:
 # ===== Backward compatibility (для старого кода) =====
 G2A_CLIENT_ID = config.g2a_client_id
 G2A_CLIENT_SECRET = config.g2a_client_secret
+G2A_CLIENT_EMAIL = config.g2a_client_email
+G2A_SELLER_ID = config.g2a_seller_id
 G2A_API_BASE = config.g2a_api_base
 REQUEST_TIMEOUT = config.request_timeout
+TELEGRAM_BOT_TOKEN = config.telegram_bot_token or ""
+TELEGRAM_CHAT_ID = config.telegram_chat_id or ""
+TELEGRAM_ENABLED = config.telegram_enabled
+
+# ✅ ДОБАВЛЕНЫ НЕДОСТАЮЩИЕ КОНСТАНТЫ для price_parser.py
+API_BASE_URL = "http://localhost:8000"  # URL вашего сервера
+DEFAULT_PREFIX = "pref"  # Префикс по умолчанию
+MIN_PRICE_TO_SELL = config.min_price_to_sell  # Минимальная цена для продажи
+ADMIN_API_KEY = "akblfkykc635671"  # API ключ для админ панели
 
 # Старые константы (для совместимости)
 KEYS_FOLDER = "keys"
@@ -137,8 +183,6 @@ RESULT_FOLDER = "result"
 PROXY_FILE = "proxy.txt"
 PRICE_EXPIRY_DAYS = 3
 DELAY_BETWEEN_REQUESTS = 1
-DEFAULT_PREFIX = "pref"
-ADMIN_API_KEY = "akblfkykc635671"
 G2A_BASE_URL = "https://www.g2a.com/category/gaming-c1"
 G2A_BASE_PARAMS = "f%5Bplatform%5D%5B0%5D=1&f%5Btype%5D%5B0%5D=10"
 
@@ -198,30 +242,40 @@ HEADERS = {
 
 
 def reload_config():
-    """Перезагрузка конфигурации из .env"""
-    global config, G2A_CLIENT_ID, G2A_CLIENT_SECRET, G2A_API_BASE, REQUEST_TIMEOUT, DATABASE_FILE
+    """Перезагрузка конфигурации из .env и JSON"""
+    global config, G2A_CLIENT_ID, G2A_CLIENT_SECRET, G2A_CLIENT_EMAIL, G2A_SELLER_ID
+    global G2A_API_BASE, REQUEST_TIMEOUT, DATABASE_FILE, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
     
     print("🔄 Reloading configuration...")
     config = G2AConfig()
     
+    # Попытка загрузить сохраненные настройки из JSON
+    saved_config = load_saved_config()
+    if saved_config:
+        config.g2a_client_id = saved_config.get("G2A_CLIENT_ID", config.g2a_client_id)
+        config.g2a_client_secret = saved_config.get("G2A_CLIENT_SECRET", config.g2a_client_secret)
+        config.g2a_client_email = saved_config.get("G2A_CLIENT_EMAIL", config.g2a_client_email)
+        config.g2a_seller_id = saved_config.get("G2A_SELLER_ID", config.g2a_seller_id)
+        config.telegram_bot_token = saved_config.get("TELEGRAM_BOT_TOKEN", config.telegram_bot_token)
+        config.telegram_chat_id = saved_config.get("TELEGRAM_CHAT_ID", config.telegram_chat_id)
+        config.telegram_enabled = saved_config.get("TELEGRAM_ENABLED", config.telegram_enabled)
+    
     # Обновляем backward compatibility переменные
     G2A_CLIENT_ID = config.g2a_client_id
     G2A_CLIENT_SECRET = config.g2a_client_secret
+    G2A_CLIENT_EMAIL = config.g2a_client_email
+    G2A_SELLER_ID = config.g2a_seller_id
     G2A_API_BASE = config.g2a_api_base
     REQUEST_TIMEOUT = config.request_timeout
     DATABASE_FILE = config.database_path
+    TELEGRAM_BOT_TOKEN = config.telegram_bot_token or ""
+    TELEGRAM_CHAT_ID = config.telegram_chat_id or ""
     
     print("✅ Configuration reloaded")
 
 
 def update_g2a_credentials(client_id: str, client_secret: str):
-    """
-    Обновление G2A credentials и сохранение в .env
-    
-    Args:
-        client_id: G2A Client ID
-        client_secret: G2A Client Secret
-    """
+    """Обновление G2A credentials и сохранение в .env"""
     env_path = Path(".env")
     
     # Читаем существующий .env
@@ -289,4 +343,6 @@ if __name__ == "__main__":
     print(f"Log Level: {config.log_level}")
     print(f"Server: {config.server_host}:{config.server_port}")
     print(f"DATABASE_FILE: {DATABASE_FILE}")
+    print(f"API_BASE_URL: {API_BASE_URL}")
+    print(f"MIN_PRICE_TO_SELL: {MIN_PRICE_TO_SELL}")
     print("=" * 40)
