@@ -45,7 +45,7 @@ if PYDANTIC_AVAILABLE:
         proxy_url: Optional[str] = Field(default=None, description="Proxy URL (http://user:pass@host:port)")
         
         # ===== Server =====
-        server_host: str = Field(default="0.0.0.0", description="Server host")
+        server_host: str = Field(default="127.0.0.1", description="Server host")
         server_port: int = Field(default=8000, description="Server port")
         
         # ===== Database =====
@@ -104,7 +104,7 @@ else:
             self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
             self.telegram_enabled = os.getenv("TELEGRAM_ENABLED", "false").lower() == "true"
             self.proxy_url = os.getenv("PROXY_URL")
-            self.server_host = os.getenv("SERVER_HOST", "0.0.0.0")
+            self.server_host = os.getenv("SERVER_HOST", "127.0.0.1")
             self.server_port = int(os.getenv("SERVER_PORT", "8000"))
             self.database_path = os.getenv("DATABASE_PATH", "keys.db")
             self.log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -172,7 +172,8 @@ TELEGRAM_CHAT_ID = config.telegram_chat_id or ""
 TELEGRAM_ENABLED = config.telegram_enabled
 
 # ✅ ДОБАВЛЕНЫ НЕДОСТАЮЩИЕ КОНСТАНТЫ для price_parser.py
-API_BASE_URL = "http://localhost:8000"  # URL вашего сервера
+# ✅ ИСПРАВЛЕНО: Используем локальный сервер вместо ngrok
+API_BASE_URL = f"http://{config.server_host}:{config.server_port}"  # Автоматически из конфига
 DEFAULT_PREFIX = "pref"  # Префикс по умолчанию
 MIN_PRICE_TO_SELL = config.min_price_to_sell  # Минимальная цена для продажи
 ADMIN_API_KEY = "akblfkykc635671"  # API ключ для админ панели
@@ -245,6 +246,7 @@ def reload_config():
     """Перезагрузка конфигурации из .env и JSON"""
     global config, G2A_CLIENT_ID, G2A_CLIENT_SECRET, G2A_CLIENT_EMAIL, G2A_SELLER_ID
     global G2A_API_BASE, REQUEST_TIMEOUT, DATABASE_FILE, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    global API_BASE_URL
     
     print("🔄 Reloading configuration...")
     config = G2AConfig()
@@ -270,6 +272,7 @@ def reload_config():
     DATABASE_FILE = config.database_path
     TELEGRAM_BOT_TOKEN = config.telegram_bot_token or ""
     TELEGRAM_CHAT_ID = config.telegram_chat_id or ""
+    API_BASE_URL = f"http://{config.server_host}:{config.server_port}"
     
     print("✅ Configuration reloaded")
 
