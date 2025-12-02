@@ -1,4 +1,4 @@
-# auto_price_changer.py - ПОЛНЫЙ КОД С НОВОЙ ЛОГИКОЙ +0.05 И ЗАЩИТОЙ
+# auto_price_changer.py - ФИНАЛЬНАЯ ВЕРСИЯ С ЛОГИКОЙ -0.01€ И ИНДИВИДУАЛЬНЫМИ ПОРОГАМИ
 
 import asyncio
 import json
@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from g2a_api_client import G2AApiClient
 from telegram_notifier import notifier
+from database import PriceDatabase
 import g2a_config
 
 
@@ -15,6 +16,7 @@ class AutoPriceSettings:
     def __init__(self, settings_file="auto_price_settings.json"):
         self.settings_file = settings_file
         self.settings = self.load_settings()
+        self.db = PriceDatabase()
 
     def load_settings(self):
         try:
@@ -28,13 +30,12 @@ class AutoPriceSettings:
             "enabled": False,
             "telegram_notifications": False,
             "check_interval": 1800,
-            "competitor_offset": 0.05,  # ✅ НОВОЕ: +0.05 от минимума конкурента
-            "min_price": 0.1,
+            "undercut_amount": 0.01,  # ✅ -0.01€ от конкурента
+            "min_price": 0.1,  # Глобальный порог
             "max_price": 100.0,
             "daily_limit": 20,
-            "excluded_products": [],
-            "included_products": [],
-            "protect_single_seller": True  # ✅ НОВОЕ: защита если ты один
+            "excluded_products": [],  # Чёрный список
+            "included_products": []   # Белый список
         }
 
     def save_settings(self):
@@ -45,35 +46,57 @@ class AutoPriceSettings:
         except Exception as e:
             print(f"❌ Ошибка сохранения: {e}")
 
-    def is_product_allowed(self, pproduct_id):
-        """Проверить разрешено ли автоизменение"""
-        pproduct_id = str(pproduct_id)
+    def is_product_allowed(self, product_id):
+        """
+        ✅ ОБНОВЛЕНО: Проверить разрешено ли автоизменение
+        
+        Приоритет:
+        1. Глобально выключено → запрет для всех
+        2. Индивидуальные настройки в БД (приоритет!)
+        3. Исключения (чёрный список)
+        4. Включения (белый список)
+        """
+        product_id = str(product_id)
+        
+        # 1️⃣ Глобально выключено
         if not self.settings.get("enabled", False):
             return False
+        
+        # 2️⃣ Проверяем индивидуальные настройки в БД
+        product_settings = self.db.get_product_settings(product_id)
+        
+        if product_settings:
+            # Есть запись → используем её настройку
+            return bool(product_settings.get("auto_enabled", 0))
+        
+        # 3️⃣ Чёрный список
         excluded = self.settings.get("excluded_products", [])
-        if pproduct_id in [str(e) for e in excluded]:
+        if product_id in [str(e) for e in excluded]:
             return False
+        
+        # 4️⃣ Белый список
         included = self.settings.get("included_products", [])
         if included:
-            return pproduct_id in [str(i) for i in included]
+            return product_id in [str(i) for i in included]
+        
+        # 5️⃣ По умолчанию → ВКЛ (если глобально включено)
         return True
 
-    def toggle_product(self, pproduct_id, enabled=True):
-        """Включить/выключить автоизменение для товара"""
-        pproduct_id = str(pproduct_id)
-        excluded = self.settings.get("excluded_products", [])
-        included = self.settings.get("included_products", [])
-
-        if enabled:
-            self.settings["excluded_products"] = [str(p) for p in excluded if str(p) != pproduct_id]
-            if product_id not in [str(i) for i in included]:
-                self.settings["included_products"].append(pproduct_id)
-        else:
-            if pproduct_id not in [str(e) for e in excluded]:
-                self.settings["excluded_products"].append(pproduct_id)
-            self.settings["included_products"] = [str(i) for i in included if str(i) != pproduct_id]
-
-        self.save_settings()
+    def toggle_product(self, product_id, enabled=True):
+        """
+        ✅ ОБНОВЛЕНО: Включить/выключить автоизменение для товара
+        
+        Теперь использует БД вместо JSON!
+        """
+        product_id = str(product_id)
+        
+        # Сохраняем в БД
+        self.db.set_product_settings(
+            product_id=product_id,
+            auto_enabled=1 if enabled else 0
+        )
+        
+        print(f"✅ Точечное авто {'ВКЛ' if enabled else 'ВЫКЛ'} для {product_id}")
 
 
 class DailyLimitTracker:
@@ -119,14 +142,22 @@ class DailyLimitTracker:
 
 
 class AutoPriceChanger:
-    """Автоматическое изменение цен с логикой +0.05"""
+    """
+    ✅ ФИНАЛЬНАЯ ВЕРСИЯ: Автоматическое изменение цен
+    
+    Логика:
+    1. Твоя_цена = мин_конкурент - 0.01€
+    2. Если цена < порога → СТОП, не меняем
+    3. Индивидуальный порог > глобальный
+    """
 
     def __init__(self):
         self.api_client = None
         self.settings = AutoPriceSettings()
         self.limit_tracker = DailyLimitTracker()
+        self.db = PriceDatabase()
         self.running = False
-        self.seller_id = None  # ✅ НОВОЕ
+        self.seller_id = None
 
     async def start(self):
         """Запустить автоизменение"""
@@ -150,8 +181,9 @@ class AutoPriceChanger:
         print("🛑 Остановка...")
 
     async def check_and_update_prices(self):
-        """ГЛАВНАЯ ЛОГИКА"""
-
+        """
+        ✅ ГЛАВНАЯ ЛОГИКА АВТОИЗМЕНЕНИЯ
+        """
         try:
             if not self.api_client:
                 self.api_client = G2AApiClient()
@@ -185,9 +217,10 @@ class AutoPriceChanger:
 
             print(f"📊 Проверка {len(offers)} офферов (осталось {remaining})")
 
-            for pproduct_id, offer_info in offers.items():
+            for product_id, offer_info in offers.items():
                 try:
-                    if not self.settings.is_product_allowed(pproduct_id):
+                    # Проверяем разрешено ли автоизменение
+                    if not self.settings.is_product_allowed(product_id):
                         continue
 
                     can_change, remaining = self.limit_tracker.can_change(daily_limit)
@@ -198,111 +231,115 @@ class AutoPriceChanger:
                     current_price = offer_info.get("price", 0)
                     game_name = offer_info.get("product_name", "Unknown")
 
+                    # ✅ Рассчитываем новую цену
                     new_price = await self.calculate_new_price(
-                        pproduct_id, current_price, game_name, offer_id
+                        product_id, current_price, game_name, offer_id
                     )
 
                     if new_price and new_price != current_price:
                         success = await self.update_offer_price(offer_id, new_price, offer_info)
+                        
                         if success:
                             self.limit_tracker.record_change()
-                            # ✅ НОВОЕ: Сохраняем статистику в БД
-                            try:
-                                from database import PriceDatabase
-                                db = PriceDatabase()
-                                db.save_price_change(
-                                    pproduct_id,
-                                    current_price,  # old_price
-                                    new_price,
-                                    new_price,  # market_price
-                                    reason="автоизменение"
-                                )
-                            except Exception as e:
-                                print(f"⚠️ Ошибка сохранения статистики: {e}")
-                            print(f"✅ {game_name}: €{current_price} → €{new_price}")
                             
-                            # Отправляем уведомление
+                            # ✅ Сохраняем статистику в БД
+                            self.db.save_price_change(
+                                product_id=product_id,
+                                old_price=current_price,
+                                new_price=new_price,
+                                market_price=new_price,
+                                reason="автоизменение",
+                                game_name=game_name
+                            )
+                            
+                            print(f"✅ {game_name}: €{current_price:.2f} → €{new_price:.2f}")
+                            
+                            # Telegram уведомление
                             await self.send_telegram_notification(
                                 game_name, current_price, new_price, "автоизменение"
                             )
-                
+
                 except Exception as e:
-                    print(f"❌ Ошибка {pproduct_id}: {e}")
-        
+                    print(f"❌ Ошибка {product_id}: {e}")
+
         except Exception as e:
             print(f"❌ Критическая ошибка: {e}")
             import traceback
             traceback.print_exc()
-    
-    async def calculate_new_price(self, pproduct_id, current_price, game_name, offer_id):
+
+    async def calculate_new_price(self, product_id, current_price, game_name, offer_id):
         """
-        ✅ НОВАЯ ЛОГИКА РАСЧЁТА ЦЕНЫ
+        ✅ ФИНАЛЬНАЯ ЛОГИКА РАСЧЁТА ЦЕНЫ
         
         Правила:
-        1. Получаем мин цену конкурента
-        2. Твоя цена = мин_конкурента + 0.05
-        3. Если ты один → защита (не меняем)
+        1. Получаем мин. конкурента из G2A API
+        2. Твоя_цена = мин_конкурент - 0.01€
+        3. Если цена < порога → СТОП, не меняем!
+        4. Индивидуальный порог > глобальный
         """
-        
         try:
-            market_info = await self.api_client.check_market_price(pproduct_id)
+            # 1️⃣ Получаем мин. конкурента из API
+            market_info = await self.api_client.check_market_price(product_id)
             
             if not market_info.get("success"):
                 return None
             
-            market_price = market_info.get("market_price", 0)
-            competitors = market_info.get("competitors", [])
+            min_competitor_price = market_info.get("market_price", 0)
+            competitors_count = market_info.get("competitors_count", 0)
             
-            min_price = self.settings.settings.get("min_price", 0.1)
+            # 2️⃣ Получаем индивидуальные настройки
+            product_settings = self.db.get_product_settings(product_id)
+            
+            # 3️⃣ Определяем порог (индивидуальный или глобальный)
+            if product_settings and product_settings.get("min_floor_price"):
+                min_floor = product_settings["min_floor_price"]
+                print(f"🛡️ Индивидуальный порог: €{min_floor:.2f}")
+            else:
+                min_floor = self.settings.settings.get("min_price", 0.1)
+                print(f"🌐 Глобальный порог: €{min_floor:.2f}")
+            
+            # 4️⃣ Определяем снижение
+            if product_settings and product_settings.get("undercut_amount"):
+                undercut = product_settings["undercut_amount"]
+            else:
+                undercut = self.settings.settings.get("undercut_amount", 0.01)
+            
+            # 5️⃣ Проверяем макс. порог
             max_price = self.settings.settings.get("max_price", 100.0)
             
-            if market_price < min_price or market_price > max_price:
-                print(f"⚠️ {game_name}: цена вне диапазона")
+            if min_competitor_price < min_floor or min_competitor_price > max_price:
+                print(f"⚠️ {game_name}: конкурент вне диапазона")
                 return None
             
-            offset = self.settings.settings.get("competitor_offset", 0.05)
+            # 6️⃣ Рассчитываем новую цену
+            # ✅ ФИНАЛЬНАЯ ЛОГИКА: твоя_цена = мин_конкурент - 0.01€
+            new_price = round(min_competitor_price - undercut, 2)
             
-            if not competitors:
-                print(f"🏆 {game_name}: ТЫ ОДИН! Защита активирована")
-                if self.settings.settings.get("protect_single_seller", True):
-                    return None
+            # 7️⃣ ✅ ПРОВЕРКА ПОРОГА!
+            if new_price < min_floor:
+                print(f"🛑 СТОП! {game_name}:")
+                print(f"   Новая цена €{new_price:.2f} < порога €{min_floor:.2f}")
+                print(f"   🛡️ Оставляем текущую: €{current_price:.2f}")
+                return None  # НЕ МЕНЯЕМ!
             
-            # Ищем конкурентов кроме себя
-            other_competitors = []
-            for comp in competitors:
-                if comp.get("seller_id") != self.seller_id:
-                    other_competitors.append(comp)
-            
-            other_competitors.sort(key=lambda x: x.get("price", float('inf')))
-            
-            if not other_competitors:
-                print(f"🏆 {game_name}: Конкурентов нет, защита активирована")
-                if self.settings.settings.get("protect_single_seller", True):
-                    return None
-            
-            # Минимальный конкурент
-            min_competitor = other_competitors[0]
-            min_competitor_price = min_competitor.get("price", 0)
-            
-            # ✅ НОВАЯ ЛОГИКА: твоя_цена = мин_конкурента + 0.05
-            new_price = round(min_competitor_price + offset, 2)
-            
-            if new_price < min_price:
-                new_price = min_price
-            elif new_price > max_price:
+            # 8️⃣ Проверяем максимум
+            if new_price > max_price:
                 new_price = max_price
             
-            print(f"📊 {game_name}: мин_конкурент={min_competitor_price}€ → твоя={new_price}€ (+{offset}€)")
+            # 9️⃣ Информация
+            print(f"📊 {game_name}:")
+            print(f"   Мин. конкурент: €{min_competitor_price:.2f}")
+            print(f"   Твоя цена: €{new_price:.2f} (-€{undercut:.2f})")
+            print(f"   🛡️ Порог: €{min_floor:.2f}")
             
             return new_price
         
         except Exception as e:
             print(f"❌ Ошибка расчёта: {e}")
             return None
-    
+
     async def update_offer_price(self, offer_id, new_price, offer_info):
         """Обновить цену оффера"""
-
         try:
             update_data = {
                 "offerType": offer_info.get("offer_type", "dropshipping"),
@@ -350,31 +387,3 @@ class AutoPriceChanger:
         
         except Exception as e:
             print(f"⚠️ Ошибка отправки Telegram: {e}")
-
-
-def save_price_change_stats(pproduct_id, old_price, new_price, market_price, reason):
-    """Сохранить статистику изменения"""
-    try:
-        stats_file = "price_changes_stats.json"
-        
-        if os.path.exists(stats_file):
-            with open(stats_file, 'r', encoding='utf-8') as f:
-                stats = json.load(f)
-        else:
-            stats = []
-        
-        stats.append({
-            "timestamp": datetime.now().isoformat(),
-            "pproduct_id": pproduct_id,
-            "old_price": old_price,
-            "new_price": new_price,
-            "market_price": market_price,
-            "change": round(new_price - old_price, 2),
-            "reason": reason
-        })
-        
-        with open(stats_file, 'w', encoding='utf-8') as f:
-            json.dump(stats, f, indent=4, ensure_ascii=False)
-    
-    except Exception as e:
-        print(f"❌ Ошибка сохранения статистики: {e}")
