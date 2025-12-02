@@ -55,26 +55,144 @@ class G2AApiClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         pass  # httpx клиенты закрываются автоматически через async with
 
-    async def check_market_price(self, product_id):
+    @auto_refresh_token
+    async def get_competitor_min_price(self, product_id, country_code="PL"):
         """
-        ✅ НОВАЯ ФУНКЦИЯ: Получить информацию о конкурентах и рыночную цену
-        Возвращает:
-        - market_price: текущая минимальная цена на рынке
-        - competitors: список всех конкурентов с их ценами
+        ✅ НОВАЯ ФУНКЦИЯ: Получить минимальную цену конкурента для продукта
+        
+        Args:
+            product_id: ID продукта G2A
+            country_code: Код страны (по умолчанию PL - Польша)
+        
+        Returns:
+            dict: {
+                "success": True/False,
+                "min_price": float,  # Минимальная цена конкурента
+                "competitor_count": int,  # Количество конкурентов
+                "my_position": int,  # Ваша позиция (если оффер активен)
+                "error": str  # Если была ошибка
+            }
         """
+        if not self.token:
+            raise Exception("No token available")
+        
         try:
-            # Это зависит от API G2A - используем существующий метод
-            # Если get_market_price() уже есть - используем его
-            if hasattr(self, 'get_market_price'):
-                return await self.get_market_price(product_id)
-
-            # Fallback: возвращаем базовый формат
+            headers = {
+                "Authorization": f"Bearer {self.token}",
+                "Accept": "application/json"
+            }
+            
+            # Получаем наш seller_id
+            my_seller_id = g2a_config.G2A_SELLER_ID
+            
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                # Запрашиваем все офферы для продукта
+                response = await client.get(
+                    f"{G2A_API_BASE}/v3/products/{product_id}/offers",
+                    headers=headers,
+                    params={
+                        "visibility": "all",
+                        "countryCode": country_code,
+                        "itemsPerPage": 50,
+                        "page": 1
+                    }
+                )
+                
+                if response.status_code != 200:
+                    if self.is_auth_error(response.status_code, response.text):
+                        raise Exception(f"401 Unauthorized: {response.text}")
+                    return {
+                        "success": False,
+                        "error": f"HTTP {response.status_code}: {response.text}",
+                        "min_price": None,
+                        "competitor_count": 0
+                    }
+                
+                data = response.json()
+                offers = data.get("data", [])
+                
+                if not offers:
+                    return {
+                        "success": True,
+                        "min_price": None,
+                        "competitor_count": 0,
+                        "message": "Нет конкурентов для этого продукта"
+                    }
+                
+                # Фильтруем активные офферы и сортируем по цене
+                active_offers = []
+                my_price = None
+                
+                for offer in offers:
+                    seller_id = offer.get("seller", {}).get("id")
+                    is_active = offer.get("status") == "active"
+                    price_data = offer.get("price", {})
+                    price = float(price_data.get("retail", 0))
+                    
+                    if is_active and price > 0:
+                        if seller_id == my_seller_id:
+                            my_price = price
+                        else:
+                            active_offers.append({
+                                "seller_id": seller_id,
+                                "price": price
+                            })
+                
+                # Сортируем по цене (от меньшей к большей)
+                active_offers.sort(key=lambda x: x["price"])
+                
+                # Минимальная цена конкурента
+                min_competitor_price = active_offers[0]["price"] if active_offers else None
+                
+                # Определяем нашу позицию
+                my_position = None
+                if my_price:
+                    # Считаем сколько конкурентов дешевле нас
+                    cheaper_count = sum(1 for o in active_offers if o["price"] < my_price)
+                    my_position = cheaper_count + 1
+                
+                return {
+                    "success": True,
+                    "min_price": min_competitor_price,
+                    "competitor_count": len(active_offers),
+                    "my_price": my_price,
+                    "my_position": my_position,
+                    "all_competitors": active_offers[:10]  # Топ-10 конкурентов
+                }
+                
+        except Exception as e:
+            if "401" in str(e) or "unauthorized" in str(e).lower():
+                raise e
             return {
-                "success": True,
-                "market_price": 0,
-                "competitors": []
+                "success": False,
+                "error": str(e),
+                "min_price": None,
+                "competitor_count": 0
             }
 
+    async def check_market_price(self, product_id):
+        """
+        ✅ ОБНОВЛЕНО: Получить информацию о конкурентах и рыночную цену
+        Использует новый метод get_competitor_min_price
+        """
+        try:
+            result = await self.get_competitor_min_price(product_id)
+            
+            if result.get("success"):
+                return {
+                    "success": True,
+                    "market_price": result.get("min_price", 0),
+                    "competitors": result.get("all_competitors", []),
+                    "competitor_count": result.get("competitor_count", 0),
+                    "my_position": result.get("my_position")
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get("error"),
+                    "market_price": 0,
+                    "competitors": []
+                }
         except Exception as e:
             print(f"❌ Ошибка получения рыночной цены: {e}")
             return {
@@ -185,13 +303,18 @@ class G2AApiClient:
                 for offer in offers_data:
                     product_id = str(offer.get("product", {}).get("id"))
                     if product_id and product_id != "None":
+                        # ✅ ДОБАВЛЕНО: Извлекаем seller_id
+                        seller_data = offer.get("seller", {})
+                        seller_id = seller_data.get("id", "")
+                        
                         all_offers[product_id] = {
                             "id": offer.get("id"),
                             "product_name": offer.get("product", {}).get("name", f"ID: {product_id}"),
                             "price": offer.get("price", "N/A"),
                             "current_stock": offer.get("inventory", {}).get("size", 0),
                             "is_active": offer.get("status") == "active",
-                            "offer_type": offer.get("type", "game")
+                            "offer_type": offer.get("type", "game"),
+                            "seller_id": seller_id  # ✅ НОВОЕ
                         }
 
                 total_results = meta.get("totalResults", 0)
@@ -208,16 +331,6 @@ class G2AApiClient:
             "offers_cache": all_offers,
             "total_loaded": len(all_offers)
         }
-
-
-    def is_auth_error(self, status_code, response_text=""):
-        """Проверка, является ли ошибка связанной с авторизацией"""
-        if status_code == 401:
-            return True
-
-        response_lower = response_text.lower()
-        auth_keywords = ["unauthorized", "invalid token", "token expired", "authentication failed"]
-        return any(keyword in response_lower for keyword in auth_keywords)
 
     @auto_refresh_token
     async def get_product_price(self, product_id):
