@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 import httpx
 import requests
+import traceback
 
 # Импорты модулей
 from key_manager import KeyManager, G2AOfferCreator
@@ -522,35 +523,76 @@ class G2AAutomationGUI(ctk.CTk):
             messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}")
 
     def load_offers(self):
-        """Загрузка офферов с сервера"""
+        """✅ ИСПРАВЛЕНО: Загрузка офферов с детальным логированием"""
+        print("\n" + "="*60)
+        print("🔄 НАЧАЛО ЗАГРУЗКИ ОФФЕРОВ")
+        print("="*60)
+        
         def run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
+                print("📡 Шаг 1: Создание API клиента...")
                 self.api_client = G2AApiClient()
-                loop.run_until_complete(self.api_client.get_token())
                 
+                print("🔑 Шаг 2: Получение токена авторизации...")
+                loop.run_until_complete(self.api_client.get_token())
+                print("✅ Токен получен успешно")
+                
+                print("📦 Шаг 3: Запрос списка офферов...")
                 result = loop.run_until_complete(self.api_client.get_offers())
                 
+                print(f"📊 Получен результат: success={result.get('success')}")
+                
                 if result.get("success"):
+                    print("✅ Офферы успешно получены")
+                    
+                    # Извлекаем seller_id
                     if result.get("offers_cache"):
                         first_offer = next(iter(result["offers_cache"].values()), None)
                         if first_offer and first_offer.get("seller_id"):
                             seller_id = first_offer.get("seller_id")
                             self.seller_id_var.set(seller_id)
                             g2a_config.G2A_SELLER_ID = seller_id
+                            print(f"✅ Seller ID установлен: {seller_id}")
 
                     self.offers_data = result.get("offers_cache", {})
-                    self.refresh_offers_table()
+                    print(f"📦 Всего офферов загружено: {len(self.offers_data)}")
                     
-                    messagebox.showinfo("Готово", f"Загружено {len(self.offers_data)} офферов")
+                    # Обновляем таблицу
+                    print("🔄 Обновление таблицы GUI...")
+                    self.refresh_offers_table()
+                    print("✅ Таблица обновлена")
+                    
+                    messagebox.showinfo("Готово", f"✅ Загружено {len(self.offers_data)} офферов")
+                    print("="*60)
+                    print("✅ ЗАГРУЗКА ОФФЕРОВ ЗАВЕРШЕНА")
+                    print("="*60 + "\n")
                 else:
-                    messagebox.showerror("Ошибка", result.get("error"))
+                    error_msg = result.get("error", "Неизвестная ошибка")
+                    print(f"❌ ОШИБКА API: {error_msg}")
+                    messagebox.showerror("Ошибка API", f"Не удалось загрузить офферы:\n\n{error_msg}")
+                    
             except Exception as e:
-                messagebox.showerror("Ошибка", str(e))
+                print(f"\n{'='*60}")
+                print("❌ КРИТИЧЕСКАЯ ОШИБКА")
+                print(f"{'='*60}")
+                print(f"Тип ошибки: {type(e).__name__}")
+                print(f"Сообщение: {str(e)}")
+                print("\nПолный traceback:")
+                traceback.print_exc()
+                print(f"{'='*60}\n")
+                
+                messagebox.showerror(
+                    "Критическая ошибка",
+                    f"Не удалось загрузить офферы:\n\n{type(e).__name__}: {str(e)}\n\nПроверьте консоль для подробностей"
+                )
             finally:
+                print("🔄 Закрытие event loop...")
                 loop.close()
+                print("✅ Event loop закрыт\n")
 
+        print("🚀 Запуск в отдельном потоке...")
         threading.Thread(target=run, daemon=True).start()
 
     def refresh_offers_table(self):
